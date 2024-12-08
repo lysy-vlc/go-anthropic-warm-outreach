@@ -1,0 +1,148 @@
+package components
+
+import "outreach-generator/internal/types"
+
+templ Home(contacts []types.Contact, languages []types.Language) {
+	@Layout("AI Outreach Generator") {
+		<div class="container mx-auto p-4">
+			<h1 class="text-2xl font-bold mb-4">AI Outreach Generator</h1>
+
+			<div class="mb-6">
+				<button
+					hx-get="/api/companies"
+					hx-target="#contacts-list"
+					hx-indicator="#loading"
+					class="px-6 py-2 bg-indigo-600 text-white rounded hover:bg-indigo-700 disabled:opacity-50"
+				>
+					Fetch Contacts from Airtable
+				</button>
+				<div id="loading" class="htmx-indicator">
+					Loading...
+				</div>
+			</div>
+
+			<div class="mb-4">
+				<div class="flex justify-between items-center mb-4">
+					<label class="block text-sm font-medium text-gray-700">Outreach Language:</label>
+					<select
+						name="language"
+						hx-trigger="change"
+						hx-post="/api/set-language"
+						class="ml-2 rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+					>
+						for _, lang := range languages {
+							<option value={lang.Code} selected?={lang.Selected}>{lang.Name}</option>
+						}
+					</select>
+				</div>
+
+				<label class="block mb-2">Service Description / Prompt Template:</label>
+				<textarea
+					id="prompt"
+					name="prompt"
+					class="w-full h-32 p-2 border rounded"
+					placeholder="Describe your services and outreach style..."
+				></textarea>
+
+				<div class="mt-2 flex justify-end">
+					<button
+						hx-post="/api/generate-all"
+						hx-include="#prompt"
+						hx-target="#contacts-list"
+						hx-indicator="#loading-all"
+						hx-disabled-elt="this"
+						class="px-6 py-2 bg-green-600 text-white rounded hover:bg-green-700 disabled:opacity-50 flex items-center"
+					>
+						<span>Generate All Outreach</span>
+						<div id="loading-all" class="htmx-indicator ml-2 inline-flex items-center">
+							<svg class="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+								<circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+								<path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+							</svg>
+							<span class="ml-2">Generating...</span>
+						</div>
+					</button>
+				</div>
+			</div>
+
+			<div id="contacts-list" class="space-y-4">
+				@ContactsList(contacts)
+			</div>
+		</div>
+	}
+}
+
+templ ContactsList(contacts []types.Contact) {
+	for _, contact := range contacts {
+		@ContactCard(contact)
+	}
+}
+
+templ ContactCard(contact types.Contact) {
+	<div class="border p-4 rounded">
+		if contact.Error != "" {
+			<div class="mb-4 p-3 bg-red-50 text-red-700 rounded border border-red-200">
+				<p class="text-sm">{contact.Error}</p>
+			</div>
+		}
+		<div class="grid grid-cols-2 gap-4 mb-3">
+			<div>
+				<h2 class="font-bold text-lg">{contact.CompanyName}</h2>
+				<p class="text-sm text-gray-600">Contact: {contact.Fullname}</p>
+				<p class="text-sm text-gray-600">Segment: {contact.BusinessSegment}</p>
+			</div>
+			<div>
+				<p class="text-sm">
+					<strong>Email:</strong> {contact.Email}
+				</p>
+				<p class="text-sm">
+					<strong>Phone:</strong> {contact.Phone}
+				</p>
+				<p class="text-sm">
+					<strong>Location:</strong> {contact.City}, {contact.Country}
+				</p>
+			</div>
+		</div>
+
+		<p class="text-sm text-gray-600 mb-2">
+			Website: <a href={ templ.SafeURL(contact.Website) } target="_blank" rel="noopener noreferrer" class="text-blue-500 hover:underline">{contact.Website}</a>
+		</p>
+
+		if contact.OutreachText != "" {
+			<div class="mt-2 p-3 bg-gray-50 rounded border">
+				<h3 class="font-semibold mb-2">Generated Outreach:</h3>
+				<p class="text-sm whitespace-pre-wrap">{contact.OutreachText}</p>
+			</div>
+		}
+
+		<button
+			hx-post="/api/generate-outreach"
+			hx-include="#prompt"
+			hx-target="closest div"
+			hx-headers='{"Content-Type": "application/json"}'
+			hx-vals={`{
+				"recordId": "` + contact.ID + `",
+				"website": "` + contact.Website + `",
+				"language": "pl",
+				"contactInfo": {
+					"name": "` + contact.Fullname + `",
+					"company": "` + contact.CompanyName + `",
+					"segment": "` + contact.BusinessSegment + `"
+				}
+			}`}
+			class={ "mt-3 px-4 py-2 text-white rounded hover:bg-blue-600 flex items-center" + cond(contact.Error != "", " bg-gray-400 cursor-not-allowed", " bg-blue-500") }
+			hx-indicator={"#loading-" + contact.ID}
+			hx-disabled-elt="this"
+			disabled?={ contact.Error != "" }
+		>
+			<span>Generate Outreach</span>
+			<div id={"loading-" + contact.ID} class="htmx-indicator ml-2 inline-flex items-center">
+				<svg class="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+					<circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+					<path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+				</svg>
+				<span class="ml-2">Generating...</span>
+			</div>
+		</button>
+	</div>
+} 
